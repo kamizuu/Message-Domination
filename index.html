@@ -7,7 +7,7 @@
 <body>
   <h1 id="heading">Message Domination</h1>
   <h2>Welcome to Message Domination!</h2>
-  <p>Send a public message or DM someone to steal the latest spot.</p>
+  <p>Public messages control domination. DMs are private.</p>
 
   <div class="input-container">
     <input type="text" id="usernameInput" placeholder="Your username (optional)">
@@ -16,11 +16,23 @@
     <button onclick="storeMessage()">Submit</button>
   </div>
 
+  <!-- PUBLIC MESSAGE -->
+  <h3 class="section-title">Public Domination Message</h3>
   <p id="displayMessage"></p>
+
+  <!-- DMS -->
+  <h3 class="section-title">Direct Messages</h3>
+  <div id="dmBox"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      push,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
@@ -29,64 +41,72 @@
       projectId: "message-domination",
       storageBucket: "message-domination.firebasestorage.app",
       messagingSenderId: "517052643118",
-      appId: "1:517052643118:web:a32021ce8587bef39f2cbf",
-      measurementId: "G-4HL3HFBXD8"
+      appId: "1:517052643118:web:a32021ce8587bef39f2cbf"
     };
 
     const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
+    const db = getDatabase(app);
+
+    function getCurrentUser() {
+      return document.getElementById("usernameInput").value.trim() || "Anonymous";
+    }
 
     function storeMessage() {
-      let from = document.getElementById("usernameInput").value.trim();
-      let to = document.getElementById("targetInput").value.trim();
+      const from = getCurrentUser();
+      const toRaw = document.getElementById("targetInput").value.trim();
       const text = document.getElementById("messageInput").value.trim();
 
-      if (!text) {
-        alert("Please enter a message.");
-        return;
+      if (!text) return;
+
+      // DM
+      if (toRaw) {
+        push(ref(db, "messages/dms"), {
+          from,
+          to: toRaw,
+          text,
+          timestamp: Date.now()
+        });
+      } 
+      // Public
+      else {
+        set(ref(db, "messages/latest"), {
+          from,
+          text,
+          timestamp: Date.now()
+        });
       }
-
-      if (!from) from = "Anonymous";
-      if (to === "") to = null;
-
-      set(ref(database, "messages/latest"), {
-        from,
-        to,
-        text,
-        timestamp: Date.now()
-      });
 
       document.getElementById("messageInput").value = "";
     }
 
     window.storeMessage = storeMessage;
 
-    const latestMessageRef = ref(database, "messages/latest");
-    onValue(latestMessageRef, (snapshot) => {
+    // 🔴 PUBLIC MESSAGE LISTENER
+    onValue(ref(db, "messages/latest"), (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
 
-      const currentUser =
-        document.getElementById("usernameInput").value.trim() || "Anonymous";
-
-      // 👇 DM visibility logic
-      const canRead =
-        data.to === null ||
-        data.to === currentUser ||
-        data.from === currentUser;
-
-      if (!canRead) {
-        document.getElementById("displayMessage").textContent =
-          "A new message was sent (not for you).";
-        return;
-      }
-
-      const label = data.to
-        ? `${data.from} ➜ ${data.to}`
-        : data.from;
-
       document.getElementById("displayMessage").textContent =
-        `${label}: ${data.text}`;
+        `${data.from}: ${data.text}`;
+    });
+
+    // 🔵 DM LISTENER
+    onValue(ref(db, "messages/dms"), (snapshot) => {
+      const box = document.getElementById("dmBox");
+      box.innerHTML = "";
+
+      const currentUser = getCurrentUser();
+      const dms = snapshot.val();
+      if (!dms) return;
+
+      Object.values(dms).forEach(dm => {
+        if (dm.to === currentUser || dm.from === currentUser) {
+          const div = document.createElement("div");
+          div.className = "dm-message";
+          div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
+          box.appendChild(div);
+        }
+      });
     });
   </script>
 </body>
