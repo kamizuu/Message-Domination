@@ -95,3 +95,24 @@ button:hover {
         width: 400px;
     }
 }
+.section-title {
+    text-align: center;
+    color: #FF0000;
+    margin-top: 30px;
+}
+
+#dmBox {
+    max-width: 700px;
+    margin: 10px auto;
+    border: 2px solid #FF0000;
+    padding: 10px;
+    background-color: #111;
+}
+
+.dm-message {
+    padding: 6px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #444;
+    color: white;
+    font-size: 14px;
+}
