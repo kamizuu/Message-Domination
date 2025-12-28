@@ -7,12 +7,12 @@
 <body>
   <h1 id="heading">Message Domination</h1>
   <h2>Welcome to Message Domination!</h2>
-  <p>Public messages control domination. DMs are private.</p>
+  <p>Hold your position as the most recent sender!</p>
 
   <div class="input-container">
-    <input type="text" id="usernameInput" placeholder="Your username (optional)">
-    <input type="text" id="targetInput" placeholder="DM username (optional)">
-    <input type="text" id="messageInput" placeholder="Enter your message">
+    <input type="text" id="usernameInput" placeholder="From (optional)">
+    <input type="text" id="targetInput" placeholder="To (leave blank for public)">
+    <input type="text" id="messageInput" placeholder="Message">
     <button onclick="storeMessage()">Submit</button>
   </div>
 
@@ -21,7 +21,7 @@
   <p id="displayMessage"></p>
 
   <!-- DMS -->
-  <h3 class="section-title">Direct Messages</h3>
+  <h3 class="section-title">Private Messages</h3>
   <div id="dmBox"></div>
 
   <script type="module">
