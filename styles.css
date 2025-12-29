@@ -32,7 +32,18 @@ p {
     margin-top: 20px;
 }
 
-input[type="text"], input[type="password"] {
+input[type="text"] {
+    padding: 8px;
+    margin: 6px 0;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 300px;
+    background-color: #222222;
+    color: white;
+}
+
+input[type="password"] {
     padding: 8px;
     margin: 6px 0;
     font-size: 16px;
