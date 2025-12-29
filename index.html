@@ -91,23 +91,25 @@
     });
 
     // 🔵 DM LISTENER
-    onValue(ref(db, "messages/dms"), (snapshot) => {
-      const box = document.getElementById("dmBox");
-      box.innerHTML = "";
+onValue(ref(db, "messages/dms"), (snapshot) => {
+  const box = document.getElementById("dmBox");
+  box.innerHTML = "";
 
-      const currentUser = getCurrentUser();
-      const dms = snapshot.val();
-      if (!dms) return;
+  const currentUser = getCurrentUser();
+  const dms = snapshot.val();
+  if (!dms) return;
 
-      Object.values(dms).forEach(dm => {
-        if (dm.to === currentUser || dm.from === currentUser) {
-          const div = document.createElement("div");
-          div.className = "dm-message";
-          div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
-          box.appendChild(div);
-        }
-      });
+  // Convert to array, filter, then sort newest → oldest
+  Object.values(dms)
+    .filter(dm => dm.to === currentUser || dm.from === currentUser)
+    .sort((a, b) => b.timestamp - a.timestamp) // 🔥 newest first
+    .forEach(dm => {
+      const div = document.createElement("div");
+      div.className = "dm-message";
+      div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
+      box.appendChild(div);
     });
+});
   </script>
 </body>
 </html>
