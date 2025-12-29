@@ -150,24 +150,24 @@
     });
   }
 
-  // 🔵 DMs + Notifications (FIXED)
+  // 🔵 DMs + Notifications (fixed)
   function listenDMs() {
     onValue(ref(db, "messages/dms"), (snap) => {
       const box = document.getElementById("dmBox");
-      box.innerHTML = "";
-
       const dmsObj = snap.val();
-      if (!dmsObj) return;
+      if (!dmsObj) {
+        box.innerHTML = "";
+        return;
+      }
 
+      // Filter for current user
       const dms = Object.values(dmsObj)
-        .filter(dm =>
-          dm.from === currentUsername || dm.to === currentUsername
-        )
-        .sort((a, b) => b.timestamp - a.timestamp);
+        .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
+        .sort((a, b) => b.timestamp - a.timestamp); // newest first
 
       let newestTimestamp = lastDMTime;
 
-      // 🔔 Notify first
+      // Trigger notifications first
       dms.forEach(dm => {
         if (
           dm.to === currentUsername &&
@@ -179,14 +179,13 @@
           });
         }
 
-        if (dm.timestamp > newestTimestamp) {
-          newestTimestamp = dm.timestamp;
-        }
+        if (dm.timestamp > newestTimestamp) newestTimestamp = dm.timestamp;
       });
 
       lastDMTime = newestTimestamp;
 
-      // 🖥️ Render after
+      // Render DMs
+      box.innerHTML = "";
       dms.forEach(dm => {
         const div = document.createElement("div");
         div.className = "dm-message";
