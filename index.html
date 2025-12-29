@@ -8,7 +8,7 @@
 
 <h1 id="heading">Message Domination</h1>
 
-<!-- 🔔 NOTIFICATION PROMPT -->
+<!-- 🔔 Notification Prompt -->
 <div id="notifyBox" class="input-container" style="display:none;">
   <p>Enable notifications for Direct Messages?</p>
   <button onclick="enableNotifications()">Enable Notifications</button>
@@ -67,7 +67,7 @@
   let currentUsername = null;
   let lastDMTime = 0;
 
-  // 🔔 SHOW PROMPT ON LOAD (if needed)
+  // 🔔 Show notification banner on load
   window.addEventListener("load", () => {
     if ("Notification" in window && Notification.permission === "default") {
       document.getElementById("notifyBox").style.display = "block";
@@ -81,7 +81,7 @@
   }
   window.enableNotifications = enableNotifications;
 
-  // 🔐 LOGIN / AUTO SIGNUP
+  // 🔐 Login / Auto Signup
   async function login() {
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value;
@@ -101,7 +101,7 @@
   }
   window.login = login;
 
-  // 🔄 AUTH STATE
+  // 🔄 Auth state
   onAuthStateChanged(auth, (user) => {
     if (!user) return;
 
@@ -115,7 +115,7 @@
     listenDMs();
   });
 
-  // ✉️ SEND MESSAGE
+  // ✉️ Send message
   function storeMessage() {
     const to = document.getElementById("targetInput").value.trim();
     const text = document.getElementById("messageInput").value.trim();
@@ -140,46 +140,59 @@
   }
   window.storeMessage = storeMessage;
 
-  // 🔴 PUBLIC
+  // 🔴 Public listener
   function listenPublic() {
     onValue(ref(db, "messages/latest"), (snap) => {
       const d = snap.val();
       if (!d) return;
-      document.getElementById("displayMessage").textContent = `${d.from}: ${d.text}`;
+      document.getElementById("displayMessage").textContent =
+        `${d.from}: ${d.text}`;
     });
   }
 
-  // 🔵 DMS + NOTIFICATIONS
+  // 🔵 DMs + Notifications (FIXED)
   function listenDMs() {
     onValue(ref(db, "messages/dms"), (snap) => {
       const box = document.getElementById("dmBox");
       box.innerHTML = "";
 
-      const dms = snap.val();
-      if (!dms) return;
+      const dmsObj = snap.val();
+      if (!dmsObj) return;
 
-      Object.values(dms)
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .forEach(dm => {
-          if (dm.from !== currentUsername && dm.to !== currentUsername) return;
+      const dms = Object.values(dmsObj)
+        .filter(dm =>
+          dm.from === currentUsername || dm.to === currentUsername
+        )
+        .sort((a, b) => b.timestamp - a.timestamp);
 
-          if (
-            dm.to === currentUsername &&
-            dm.timestamp > lastDMTime &&
-            Notification.permission === "granted"
-          ) {
-            new Notification("New DM", {
-              body: `${dm.from}: ${dm.text}`
-            });
-          }
+      let newestTimestamp = lastDMTime;
 
-          const div = document.createElement("div");
-          div.className = "dm-message";
-          div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
-          box.appendChild(div);
+      // 🔔 Notify first
+      dms.forEach(dm => {
+        if (
+          dm.to === currentUsername &&
+          dm.timestamp > lastDMTime &&
+          Notification.permission === "granted"
+        ) {
+          new Notification("New DM", {
+            body: `${dm.from}: ${dm.text}`
+          });
+        }
 
-          if (dm.timestamp > lastDMTime) lastDMTime = dm.timestamp;
-        });
+        if (dm.timestamp > newestTimestamp) {
+          newestTimestamp = dm.timestamp;
+        }
+      });
+
+      lastDMTime = newestTimestamp;
+
+      // 🖥️ Render after
+      dms.forEach(dm => {
+        const div = document.createElement("div");
+        div.className = "dm-message";
+        div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
+        box.appendChild(div);
+      });
     });
   }
 </script>
