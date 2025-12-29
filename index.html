@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Message Domination</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <h1 id="heading">Message Domination</h1>
+
+  <!-- LOGIN BOX -->
+  <div id="loginBox" class="input-container">
+    <h2>Login / Sign Up</h2>
+    <input type="text" id="loginUsername" placeholder="Username">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button onclick="login()">Login / Create Account</button>
+    <p id="loginStatus"></p>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="appBox" style="display:none;">
+    <h2>Welcome!</h2>
+    <p>Hold your position as the most recent sender.</p>
+
+    <div class="input-container">
+      <input type="text" id="targetInput" placeholder="DM To (optional)">
+      <input type="text" id="messageInput" placeholder="Message (required)">
+      <button onclick="storeMessage()">Submit</button>
+    </div>
+
+    <!-- PUBLIC MESSAGE -->
+    <h3 class="section-title">Latest Public Message</h3>
+    <p id="displayMessage"></p>
+
+    <!-- DMS -->
+    <h3 class="section-title">Direct Messages</h3>
+    <div id="dmBox"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      push,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
+    import {
+      getAuth,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
+
+    // 🔥 FIREBASE CONFIG
+    const firebaseConfig = {
+      apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
+      authDomain: "message-domination.firebaseapp.com",
+      databaseURL: "https://message-domination-default-rtdb.firebaseio.com",
+      projectId: "message-domination",
+      storageBucket: "message-domination.firebasestorage.app",
+      messagingSenderId: "517052643118",
+      appId: "1:517052643118:web:a32021ce8587bef39f2cbf"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    let currentUsername = null;
+
+    // 🔁 USERNAME → EMAIL
+    function usernameToEmail(username) {
+      return `${username}@messagedom.local`;
+    }
+
+    // 🔐 LOGIN / SIGNUP
+    window.login = async function () {
+      const username = document.getElementById("loginUsername").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const status = document.getElementById("loginStatus");
+
+      if (!username || !password) {
+        status.textContent = "Username and password required.";
+        return;
+      }
+
+      const email = usernameToEmail(username);
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (err) {
+        if (err.code === "auth/user-not-found") {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          status.textContent = err.message;
+        }
+      }
+    };
+
+    // ✅ AUTH STATE
+    onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+
+      currentUsername = user.email.split("@")[0];
+
+      document.getElementById("loginBox").style.display = "none";
+      document.getElementById("appBox").style.display = "block";
+
+      listenPublic();
+      listenDMs();
+    });
+
+    // 📩 SEND MESSAGE
+    window.storeMessage = function () {
+      const text = document.getElementById("messageInput").value.trim();
+      const to = document.getElementById("targetInput").value.trim();
+
+      if (!text) return;
+
+      if (to) {
+        push(ref(db, "messages/dms"), {
+          from: currentUsername,
+          to,
+          text,
+          timestamp: Date.now()
+        });
+      } else {
+        set(ref(db, "messages/latest"), {
+          from: currentUsername,
+          text,
+          timestamp: Date.now()
+        });
+      }
+
+      document.getElementById("messageInput").value = "";
+    };
+
+    // 🌍 PUBLIC LISTENER
+    function listenPublic() {
+      onValue(ref(db, "messages/latest"), (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        document.getElementById("displayMessage").textContent =
+          `${data.from}: ${data.text}`;
+      });
+    }
+
+    // 🔒 DM LISTENER
+    function listenDMs() {
+      onValue(ref(db, "messages/dms"), (snapshot) => {
+        const box = document.getElementById("dmBox");
+        box.innerHTML = "";
+
+        if (!currentUsername) return;
+
+        const dms = snapshot.val();
+        if (!dms) return;
+
+        Object.values(dms)
+          .filter(dm =>
+            dm.to === currentUsername || dm.from === currentUsername
+          )
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .forEach(dm => {
+            const div = document.createElement("div");
+            div.className = "dm-message";
+            div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
+            box.appendChild(div);
+          });
+      });
+    }
+  </script>
+
+</body>
+</html>
