@@ -1,36 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Message Domination</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="styles.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
 
   <h1 id="heading">Message Domination</h1>
 
-  <!-- LOGIN BOX -->
+  <!-- LOGIN -->
   <div id="loginBox" class="input-container">
     <h2>Login / Sign Up</h2>
     <input type="text" id="loginUsername" placeholder="Username">
     <input type="password" id="loginPassword" placeholder="Password">
-    <button onclick="login()">Login / Create Account</button>
+    <button onclick="login()">Login</button>
     <p id="loginStatus"></p>
   </div>
 
-  <!-- MAIN APP -->
+  <!-- APP -->
   <div id="appBox" style="display:none;">
     <h2>Welcome!</h2>
-    <p>Hold your position as the most recent sender.</p>
+    <p>You are logged in as <strong id="currentUser"></strong></p>
 
     <div class="input-container">
-      <input type="text" id="targetInput" placeholder="DM To (optional)">
+      <input type="text" id="targetInput" placeholder="To (optional)">
       <input type="text" id="messageInput" placeholder="Message (required)">
       <button onclick="storeMessage()">Submit</button>
     </div>
 
-    <!-- PUBLIC MESSAGE -->
+    <!-- PUBLIC -->
     <h3 class="section-title">Latest Public Message</h3>
     <p id="displayMessage"></p>
 
@@ -50,12 +48,11 @@
     } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
     import {
       getAuth,
-      createUserWithEmailAndPassword,
       signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
       onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
 
-    // 🔥 FIREBASE CONFIG
     const firebaseConfig = {
       apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
       authDomain: "message-domination.firebaseapp.com",
@@ -72,40 +69,40 @@
 
     let currentUsername = null;
 
-    // 🔁 USERNAME → EMAIL
-    function usernameToEmail(username) {
-      return `${username}@messagedom.local`;
-    }
-
     // 🔐 LOGIN / SIGNUP
-    window.login = async function () {
+    async function login() {
       const username = document.getElementById("loginUsername").value.trim();
       const password = document.getElementById("loginPassword").value;
-      const status = document.getElementById("loginStatus");
 
       if (!username || !password) {
-        status.textContent = "Username and password required.";
+        alert("Enter username and password");
         return;
       }
 
-      const email = usernameToEmail(username);
+      const email = `${username}@messagedom.local`;
 
       try {
         await signInWithEmailAndPassword(auth, email, password);
       } catch (err) {
-        if (err.code === "auth/user-not-found") {
+        if (
+          err.code === "auth/user-not-found" ||
+          err.code === "auth/invalid-credential"
+        ) {
           await createUserWithEmailAndPassword(auth, email, password);
         } else {
-          status.textContent = err.message;
+          alert(err.message);
         }
       }
-    };
+    }
 
-    // ✅ AUTH STATE
+    window.login = login;
+
+    // 🔄 AUTH STATE
     onAuthStateChanged(auth, (user) => {
       if (!user) return;
 
       currentUsername = user.email.split("@")[0];
+      document.getElementById("currentUser").textContent = currentUsername;
 
       document.getElementById("loginBox").style.display = "none";
       document.getElementById("appBox").style.display = "block";
@@ -114,10 +111,10 @@
       listenDMs();
     });
 
-    // 📩 SEND MESSAGE
-    window.storeMessage = function () {
-      const text = document.getElementById("messageInput").value.trim();
+    // ✉️ SEND MESSAGE
+    function storeMessage() {
       const to = document.getElementById("targetInput").value.trim();
+      const text = document.getElementById("messageInput").value.trim();
 
       if (!text) return;
 
@@ -137,33 +134,32 @@
       }
 
       document.getElementById("messageInput").value = "";
-    };
+    }
 
-    // 🌍 PUBLIC LISTENER
+    window.storeMessage = storeMessage;
+
+    // 🔴 PUBLIC LISTENER
     function listenPublic() {
-      onValue(ref(db, "messages/latest"), (snapshot) => {
-        const data = snapshot.val();
-        if (!data) return;
-
+      onValue(ref(db, "messages/latest"), (snap) => {
+        const d = snap.val();
+        if (!d) return;
         document.getElementById("displayMessage").textContent =
-          `${data.from}: ${data.text}`;
+          `${d.from}: ${d.text}`;
       });
     }
 
-    // 🔒 DM LISTENER
+    // 🔵 DM LISTENER (newest first)
     function listenDMs() {
-      onValue(ref(db, "messages/dms"), (snapshot) => {
+      onValue(ref(db, "messages/dms"), (snap) => {
         const box = document.getElementById("dmBox");
         box.innerHTML = "";
 
-        if (!currentUsername) return;
-
-        const dms = snapshot.val();
+        const dms = snap.val();
         if (!dms) return;
 
         Object.values(dms)
           .filter(dm =>
-            dm.to === currentUsername || dm.from === currentUsername
+            dm.from === currentUsername || dm.to === currentUsername
           )
           .sort((a, b) => b.timestamp - a.timestamp)
           .forEach(dm => {
