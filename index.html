@@ -8,6 +8,12 @@
 
 <h1 id="heading">Message Domination</h1>
 
+<!-- 🔔 NOTIFICATION PROMPT -->
+<div id="notifyBox" class="input-container" style="display:none;">
+  <p>Enable notifications for Direct Messages?</p>
+  <button onclick="enableNotifications()">Enable Notifications</button>
+</div>
+
 <!-- LOGIN -->
 <div id="loginBox" class="input-container">
   <h2>Login / Sign Up</h2>
@@ -36,13 +42,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
-  import {
-    getDatabase,
-    ref,
-    set,
-    push,
-    onValue
-  } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
+  import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
   import {
     getAuth,
     signInWithEmailAndPassword,
@@ -67,11 +67,24 @@
   let currentUsername = null;
   let lastDMTime = 0;
 
+  // 🔔 SHOW PROMPT ON LOAD (if needed)
+  window.addEventListener("load", () => {
+    if ("Notification" in window && Notification.permission === "default") {
+      document.getElementById("notifyBox").style.display = "block";
+    }
+  });
+
+  function enableNotifications() {
+    Notification.requestPermission().then(() => {
+      document.getElementById("notifyBox").style.display = "none";
+    });
+  }
+  window.enableNotifications = enableNotifications;
+
   // 🔐 LOGIN / AUTO SIGNUP
   async function login() {
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value;
-
     if (!username || !password) return alert("Enter username and password");
 
     const email = `${username}@messagedom.local`;
@@ -86,15 +99,7 @@
       }
     }
   }
-
   window.login = login;
-
-  // 🔔 Request notification permission
-  function requestNotifications() {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }
 
   // 🔄 AUTH STATE
   onAuthStateChanged(auth, (user) => {
@@ -106,7 +111,6 @@
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("appBox").style.display = "block";
 
-    requestNotifications();
     listenPublic();
     listenDMs();
   });
@@ -134,7 +138,6 @@
 
     document.getElementById("messageInput").value = "";
   }
-
   window.storeMessage = storeMessage;
 
   // 🔴 PUBLIC
@@ -158,10 +161,8 @@
       Object.values(dms)
         .sort((a, b) => b.timestamp - a.timestamp)
         .forEach(dm => {
-          // Show only relevant DMs
           if (dm.from !== currentUsername && dm.to !== currentUsername) return;
 
-          // 🔔 Notification (only for NEW incoming DMs)
           if (
             dm.to === currentUsername &&
             dm.timestamp > lastDMTime &&
@@ -177,9 +178,7 @@
           div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
           box.appendChild(div);
 
-          if (dm.timestamp > lastDMTime) {
-            lastDMTime = dm.timestamp;
-          }
+          if (dm.timestamp > lastDMTime) lastDMTime = dm.timestamp;
         });
     });
   }
