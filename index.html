@@ -6,171 +6,184 @@
 </head>
 <body>
 
-  <h1 id="heading">Message Domination</h1>
+<h1 id="heading">Message Domination</h1>
 
-  <!-- LOGIN -->
-  <div id="loginBox" class="input-container">
-    <h2>Login / Sign Up</h2>
-    <input type="text" id="loginUsername" placeholder="Username">
-    <input type="password" id="loginPassword" placeholder="Password">
-    <button onclick="login()">Login</button>
-    <p id="loginStatus"></p>
+<!-- LOGIN -->
+<div id="loginBox" class="input-container">
+  <h2>Login / Sign Up</h2>
+  <input type="text" id="loginUsername" placeholder="Username">
+  <input type="password" id="loginPassword" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- APP -->
+<div id="appBox" style="display:none;">
+  <h2>Welcome!</h2>
+  <p>You are logged in as <strong id="currentUser"></strong></p>
+
+  <div class="input-container">
+    <input type="text" id="targetInput" placeholder="To (optional)">
+    <input type="text" id="messageInput" placeholder="Message (required)">
+    <button onclick="storeMessage()">Submit</button>
   </div>
 
-  <!-- APP -->
-  <div id="appBox" style="display:none;">
-    <h2>Welcome!</h2>
-    <p>You are logged in as <strong id="currentUser"></strong></p>
+  <h3 class="section-title">Latest Public Message</h3>
+  <p id="displayMessage"></p>
 
-    <div class="input-container">
-      <input type="text" id="targetInput" placeholder="To (optional)">
-      <input type="text" id="messageInput" placeholder="Message (required)">
-      <button onclick="storeMessage()">Submit</button>
-    </div>
+  <h3 class="section-title">Direct Messages</h3>
+  <div id="dmBox"></div>
+</div>
 
-    <!-- PUBLIC -->
-    <h3 class="section-title">Latest Public Message</h3>
-    <p id="displayMessage"></p>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+  import {
+    getDatabase,
+    ref,
+    set,
+    push,
+    onValue
+  } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
 
-    <!-- DMS -->
-    <h3 class="section-title">Direct Messages</h3>
-    <div id="dmBox"></div>
-  </div>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
+    authDomain: "message-domination.firebaseapp.com",
+    databaseURL: "https://message-domination-default-rtdb.firebaseio.com",
+    projectId: "message-domination",
+    storageBucket: "message-domination.firebasestorage.app",
+    messagingSenderId: "517052643118",
+    appId: "1:517052643118:web:a32021ce8587bef39f2cbf"
+  };
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
-    import {
-      getDatabase,
-      ref,
-      set,
-      push,
-      onValue
-    } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
-    import {
-      getAuth,
-      signInWithEmailAndPassword,
-      createUserWithEmailAndPassword,
-      onAuthStateChanged
-    } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const auth = getAuth(app);
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
-      authDomain: "message-domination.firebaseapp.com",
-      databaseURL: "https://message-domination-default-rtdb.firebaseio.com",
-      projectId: "message-domination",
-      storageBucket: "message-domination.firebasestorage.app",
-      messagingSenderId: "517052643118",
-      appId: "1:517052643118:web:a32021ce8587bef39f2cbf"
-    };
+  let currentUsername = null;
+  let lastDMTime = 0;
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const auth = getAuth(app);
+  // 🔐 LOGIN / AUTO SIGNUP
+  async function login() {
+    const username = document.getElementById("loginUsername").value.trim();
+    const password = document.getElementById("loginPassword").value;
 
-    let currentUsername = null;
+    if (!username || !password) return alert("Enter username and password");
 
-    // 🔐 LOGIN / SIGNUP
-    async function login() {
-      const username = document.getElementById("loginUsername").value.trim();
-      const password = document.getElementById("loginPassword").value;
+    const email = `${username}@messagedom.local`;
 
-      if (!username || !password) {
-        alert("Enter username and password");
-        return;
-      }
-
-      const email = `${username}@messagedom.local`;
-
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-      } catch (err) {
-        if (
-          err.code === "auth/user-not-found" ||
-          err.code === "auth/invalid-credential"
-        ) {
-          await createUserWithEmailAndPassword(auth, email, password);
-        } else {
-          alert(err.message);
-        }
-      }
-    }
-
-    window.login = login;
-
-    // 🔄 AUTH STATE
-    onAuthStateChanged(auth, (user) => {
-      if (!user) return;
-
-      currentUsername = user.email.split("@")[0];
-      document.getElementById("currentUser").textContent = currentUsername;
-
-      document.getElementById("loginBox").style.display = "none";
-      document.getElementById("appBox").style.display = "block";
-
-      listenPublic();
-      listenDMs();
-    });
-
-    // ✉️ SEND MESSAGE
-    function storeMessage() {
-      const to = document.getElementById("targetInput").value.trim();
-      const text = document.getElementById("messageInput").value.trim();
-
-      if (!text) return;
-
-      if (to) {
-        push(ref(db, "messages/dms"), {
-          from: currentUsername,
-          to,
-          text,
-          timestamp: Date.now()
-        });
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+        await createUserWithEmailAndPassword(auth, email, password);
       } else {
-        set(ref(db, "messages/latest"), {
-          from: currentUsername,
-          text,
-          timestamp: Date.now()
-        });
+        alert(err.message);
       }
-
-      document.getElementById("messageInput").value = "";
     }
+  }
 
-    window.storeMessage = storeMessage;
+  window.login = login;
 
-    // 🔴 PUBLIC LISTENER
-    function listenPublic() {
-      onValue(ref(db, "messages/latest"), (snap) => {
-        const d = snap.val();
-        if (!d) return;
-        document.getElementById("displayMessage").textContent =
-          `${d.from}: ${d.text}`;
+  // 🔔 Request notification permission
+  function requestNotifications() {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }
+
+  // 🔄 AUTH STATE
+  onAuthStateChanged(auth, (user) => {
+    if (!user) return;
+
+    currentUsername = user.email.split("@")[0];
+    document.getElementById("currentUser").textContent = currentUsername;
+
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("appBox").style.display = "block";
+
+    requestNotifications();
+    listenPublic();
+    listenDMs();
+  });
+
+  // ✉️ SEND MESSAGE
+  function storeMessage() {
+    const to = document.getElementById("targetInput").value.trim();
+    const text = document.getElementById("messageInput").value.trim();
+    if (!text) return;
+
+    if (to) {
+      push(ref(db, "messages/dms"), {
+        from: currentUsername,
+        to,
+        text,
+        timestamp: Date.now()
+      });
+    } else {
+      set(ref(db, "messages/latest"), {
+        from: currentUsername,
+        text,
+        timestamp: Date.now()
       });
     }
 
-    // 🔵 DM LISTENER (newest first)
-    function listenDMs() {
-      onValue(ref(db, "messages/dms"), (snap) => {
-        const box = document.getElementById("dmBox");
-        box.innerHTML = "";
+    document.getElementById("messageInput").value = "";
+  }
 
-        const dms = snap.val();
-        if (!dms) return;
+  window.storeMessage = storeMessage;
 
-        Object.values(dms)
-          .filter(dm =>
-            dm.from === currentUsername || dm.to === currentUsername
-          )
-          .sort((a, b) => b.timestamp - a.timestamp)
-          .forEach(dm => {
-            const div = document.createElement("div");
-            div.className = "dm-message";
-            div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
-            box.appendChild(div);
-          });
-      });
-    }
-  </script>
+  // 🔴 PUBLIC
+  function listenPublic() {
+    onValue(ref(db, "messages/latest"), (snap) => {
+      const d = snap.val();
+      if (!d) return;
+      document.getElementById("displayMessage").textContent = `${d.from}: ${d.text}`;
+    });
+  }
+
+  // 🔵 DMS + NOTIFICATIONS
+  function listenDMs() {
+    onValue(ref(db, "messages/dms"), (snap) => {
+      const box = document.getElementById("dmBox");
+      box.innerHTML = "";
+
+      const dms = snap.val();
+      if (!dms) return;
+
+      Object.values(dms)
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .forEach(dm => {
+          // Show only relevant DMs
+          if (dm.from !== currentUsername && dm.to !== currentUsername) return;
+
+          // 🔔 Notification (only for NEW incoming DMs)
+          if (
+            dm.to === currentUsername &&
+            dm.timestamp > lastDMTime &&
+            Notification.permission === "granted"
+          ) {
+            new Notification("New DM", {
+              body: `${dm.from}: ${dm.text}`
+            });
+          }
+
+          const div = document.createElement("div");
+          div.className = "dm-message";
+          div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
+          box.appendChild(div);
+
+          if (dm.timestamp > lastDMTime) {
+            lastDMTime = dm.timestamp;
+          }
+        });
+    });
+  }
+</script>
 
 </body>
 </html>
