@@ -67,7 +67,7 @@ const auth = getAuth(app);
 let currentUsername = null;
 let lastDMTime = 0;
 
-// 🔔 Show notification banner after login
+// 🔔 Enable notifications
 function enableNotifications() {
   Notification.requestPermission().then(() => {
     document.getElementById("notifyBox").style.display = "none";
@@ -75,7 +75,7 @@ function enableNotifications() {
 }
 window.enableNotifications = enableNotifications;
 
-// 🔐 Login / Auto Signup
+// 🔐 Login / auto-signup
 async function login() {
   const username = document.getElementById("loginUsername").value.trim();
   const password = document.getElementById("loginPassword").value;
@@ -86,10 +86,20 @@ async function login() {
   try {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
-    if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-      await createUserWithEmailAndPassword(auth, email, password);
+    if (err.code === "auth/user-not-found") {
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        alert("Account created successfully!");
+      } catch (err2) {
+        alert("Error creating account: " + err2.message);
+        return;
+      }
+    } else if (err.code === "auth/wrong-password") {
+      alert("Wrong password!");
+      return;
     } else {
-      alert(err.message);
+      alert("Login error: " + err.message);
+      return;
     }
   }
 }
@@ -99,19 +109,16 @@ window.login = login;
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
 
-  // ✅ Set current username
   currentUsername = user.email.split("@")[0];
   document.getElementById("currentUser").textContent = currentUsername;
 
   document.getElementById("loginBox").style.display = "none";
   document.getElementById("appBox").style.display = "block";
 
-  // 🔔 Show notification button if needed
   if ("Notification" in window && Notification.permission === "default") {
     document.getElementById("notifyBox").style.display = "block";
   }
 
-  // Start listeners AFTER login
   listenPublic();
   listenDMs();
 });
@@ -162,17 +169,13 @@ function listenDMs() {
 
     const dms = Object.values(dmsObj)
       .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
-      .sort((a, b) => b.timestamp - a.timestamp); // newest first
+      .sort((a, b) => b.timestamp - a.timestamp);
 
     let newestTimestamp = lastDMTime;
 
-    // 🔔 Notifications first
     dms.forEach(dm => {
-      if (
-        dm.to === currentUsername &&
-        dm.timestamp > lastDMTime &&
-        Notification.permission === "granted"
-      ) {
+      if (dm.to === currentUsername && dm.timestamp > lastDMTime &&
+          Notification.permission === "granted") {
         new Notification("New DM", { body: `${dm.from}: ${dm.text}` });
       }
       if (dm.timestamp > newestTimestamp) newestTimestamp = dm.timestamp;
@@ -180,9 +183,16 @@ function listenDMs() {
 
     lastDMTime = newestTimestamp;
 
-    // Render DMs
     box.innerHTML = "";
     dms.forEach(dm => {
       const div = document.createElement("div");
       div.className = "dm-message";
-      div.textContent = `${dm.from} ➜ ${dm.to}: ${
+      div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
+      box.appendChild(div);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
