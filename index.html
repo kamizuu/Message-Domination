@@ -41,160 +41,148 @@
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
-  import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
-  import {
-    getAuth,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    onAuthStateChanged
-  } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
-    authDomain: "message-domination.firebaseapp.com",
-    databaseURL: "https://message-domination-default-rtdb.firebaseio.com",
-    projectId: "message-domination",
-    storageBucket: "message-domination.firebasestorage.app",
-    messagingSenderId: "517052643118",
-    appId: "1:517052643118:web:a32021ce8587bef39f2cbf"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
+  authDomain: "message-domination.firebaseapp.com",
+  databaseURL: "https://message-domination-default-rtdb.firebaseio.com",
+  projectId: "message-domination",
+  storageBucket: "message-domination.firebasestorage.app",
+  messagingSenderId: "517052643118",
+  appId: "1:517052643118:web:a32021ce8587bef39f2cbf"
+};
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const auth = getAuth(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
 
-  let currentUsername = null;
-  let lastDMTime = 0;
+let currentUsername = null;
+let lastDMTime = 0;
 
-  // 🔔 Show notification banner on load
-  window.addEventListener("load", () => {
-    if ("Notification" in window && Notification.permission === "default") {
-      document.getElementById("notifyBox").style.display = "block";
-    }
+// 🔔 Show notification banner after login
+function enableNotifications() {
+  Notification.requestPermission().then(() => {
+    document.getElementById("notifyBox").style.display = "none";
   });
+}
+window.enableNotifications = enableNotifications;
 
-  function enableNotifications() {
-    Notification.requestPermission().then(() => {
-      document.getElementById("notifyBox").style.display = "none";
-    });
-  }
-  window.enableNotifications = enableNotifications;
+// 🔐 Login / Auto Signup
+async function login() {
+  const username = document.getElementById("loginUsername").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  if (!username || !password) return alert("Enter username and password");
 
-  // 🔐 Login / Auto Signup
-  async function login() {
-    const username = document.getElementById("loginUsername").value.trim();
-    const password = document.getElementById("loginPassword").value;
-    if (!username || !password) return alert("Enter username and password");
+  const email = `${username}@messagedom.local`;
 
-    const email = `${username}@messagedom.local`;
-
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        alert(err.message);
-      }
-    }
-  }
-  window.login = login;
-
-  // 🔄 Auth state
-  onAuthStateChanged(auth, (user) => {
-    if (!user) return;
-
-    currentUsername = user.email.split("@")[0];
-    document.getElementById("currentUser").textContent = currentUsername;
-
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("appBox").style.display = "block";
-
-    listenPublic();
-    listenDMs();
-  });
-
-  // ✉️ Send message
-  function storeMessage() {
-    const to = document.getElementById("targetInput").value.trim();
-    const text = document.getElementById("messageInput").value.trim();
-    if (!text) return;
-
-    if (to) {
-      push(ref(db, "messages/dms"), {
-        from: currentUsername,
-        to,
-        text,
-        timestamp: Date.now()
-      });
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (err) {
+    if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+      await createUserWithEmailAndPassword(auth, email, password);
     } else {
-      set(ref(db, "messages/latest"), {
-        from: currentUsername,
-        text,
-        timestamp: Date.now()
-      });
+      alert(err.message);
+    }
+  }
+}
+window.login = login;
+
+// 🔄 Auth state
+onAuthStateChanged(auth, (user) => {
+  if (!user) return;
+
+  // ✅ Set current username
+  currentUsername = user.email.split("@")[0];
+  document.getElementById("currentUser").textContent = currentUsername;
+
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("appBox").style.display = "block";
+
+  // 🔔 Show notification button if needed
+  if ("Notification" in window && Notification.permission === "default") {
+    document.getElementById("notifyBox").style.display = "block";
+  }
+
+  // Start listeners AFTER login
+  listenPublic();
+  listenDMs();
+});
+
+// ✉️ Send message
+function storeMessage() {
+  const to = document.getElementById("targetInput").value.trim();
+  const text = document.getElementById("messageInput").value.trim();
+  if (!text) return;
+
+  if (to) {
+    push(ref(db, "messages/dms"), {
+      from: currentUsername,
+      to,
+      text,
+      timestamp: Date.now()
+    });
+  } else {
+    set(ref(db, "messages/latest"), {
+      from: currentUsername,
+      text,
+      timestamp: Date.now()
+    });
+  }
+
+  document.getElementById("messageInput").value = "";
+}
+window.storeMessage = storeMessage;
+
+// 🔴 Public listener
+function listenPublic() {
+  onValue(ref(db, "messages/latest"), (snap) => {
+    const d = snap.val();
+    if (!d) return;
+    document.getElementById("displayMessage").textContent = `${d.from}: ${d.text}`;
+  });
+}
+
+// 🔵 DM listener + notifications
+function listenDMs() {
+  onValue(ref(db, "messages/dms"), (snap) => {
+    const box = document.getElementById("dmBox");
+    const dmsObj = snap.val();
+    if (!dmsObj) {
+      box.innerHTML = "";
+      return;
     }
 
-    document.getElementById("messageInput").value = "";
-  }
-  window.storeMessage = storeMessage;
+    const dms = Object.values(dmsObj)
+      .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
+      .sort((a, b) => b.timestamp - a.timestamp); // newest first
 
-  // 🔴 Public listener
-  function listenPublic() {
-    onValue(ref(db, "messages/latest"), (snap) => {
-      const d = snap.val();
-      if (!d) return;
-      document.getElementById("displayMessage").textContent =
-        `${d.from}: ${d.text}`;
-    });
-  }
+    let newestTimestamp = lastDMTime;
 
-  // 🔵 DMs + Notifications (fixed)
-  function listenDMs() {
-    onValue(ref(db, "messages/dms"), (snap) => {
-      const box = document.getElementById("dmBox");
-      const dmsObj = snap.val();
-      if (!dmsObj) {
-        box.innerHTML = "";
-        return;
+    // 🔔 Notifications first
+    dms.forEach(dm => {
+      if (
+        dm.to === currentUsername &&
+        dm.timestamp > lastDMTime &&
+        Notification.permission === "granted"
+      ) {
+        new Notification("New DM", { body: `${dm.from}: ${dm.text}` });
       }
-
-      // Filter for current user
-      const dms = Object.values(dmsObj)
-        .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
-        .sort((a, b) => b.timestamp - a.timestamp); // newest first
-
-      let newestTimestamp = lastDMTime;
-
-      // Trigger notifications first
-      dms.forEach(dm => {
-        if (
-          dm.to === currentUsername &&
-          dm.timestamp > lastDMTime &&
-          Notification.permission === "granted"
-        ) {
-          new Notification("New DM", {
-            body: `${dm.from}: ${dm.text}`
-          });
-        }
-
-        if (dm.timestamp > newestTimestamp) newestTimestamp = dm.timestamp;
-      });
-
-      lastDMTime = newestTimestamp;
-
-      // Render DMs
-      box.innerHTML = "";
-      dms.forEach(dm => {
-        const div = document.createElement("div");
-        div.className = "dm-message";
-        div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
-        box.appendChild(div);
-      });
+      if (dm.timestamp > newestTimestamp) newestTimestamp = dm.timestamp;
     });
-  }
-</script>
 
-</body>
-</html>
+    lastDMTime = newestTimestamp;
+
+    // Render DMs
+    box.innerHTML = "";
+    dms.forEach(dm => {
+      const div = document.createElement("div");
+      div.className = "dm-message";
+      div.textContent = `${dm.from} ➜ ${dm.to}: ${
