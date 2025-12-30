@@ -14,12 +14,14 @@
   <button onclick="enableNotifications()">Enable Notifications</button>
 </div>
 
-<!-- LOGIN -->
+<!-- LOGIN / SIGNUP -->
 <div id="loginBox" class="input-container">
-  <h2>Login / Sign Up</h2>
+  <h2 id="authTitle">Login</h2>
   <input type="text" id="loginUsername" placeholder="Username">
   <input type="password" id="loginPassword" placeholder="Password">
-  <button onclick="login()">Login</button>
+  <button id="authButton" onclick="login()">Login</button>
+  <p id="authSwitch" style="cursor:pointer; color: #00f;">Don't have an account? Sign up</p>
+  <p id="authMessage" style="color:red;"></p>
 </div>
 
 <!-- APP -->
@@ -66,6 +68,7 @@ const auth = getAuth(app);
 
 let currentUsername = null;
 let lastDMTime = 0;
+let isLoginMode = true;
 
 // 🔔 Enable notifications
 function enableNotifications() {
@@ -75,35 +78,49 @@ function enableNotifications() {
 }
 window.enableNotifications = enableNotifications;
 
-// 🔐 Login / auto-signup
+// 🔐 Login / Signup
 async function login() {
   const username = document.getElementById("loginUsername").value.trim();
   const password = document.getElementById("loginPassword").value;
   if (!username || !password) return alert("Enter username and password");
 
-  const email = `${username}@messagedom.local`;
+  const email = `${username.toLowerCase()}@messagedom.com`;
+  const messageBox = document.getElementById("authMessage");
+  messageBox.textContent = "";
 
   try {
-    await signInWithEmailAndPassword(auth, email, password);
-  } catch (err) {
-    if (err.code === "auth/user-not-found") {
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        alert("Account created successfully!");
-      } catch (err2) {
-        alert("Error creating account: " + err2.message);
-        return;
-      }
-    } else if (err.code === "auth/wrong-password") {
-      alert("Wrong password!");
-      return;
+    if (isLoginMode) {
+      await signInWithEmailAndPassword(auth, email, password);
     } else {
-      alert("Login error: " + err.message);
-      return;
+      await createUserWithEmailAndPassword(auth, email, password);
+      alert("Account created successfully! You can now log in.");
+      toggleAuthMode(); // switch to login after signup
     }
+  } catch (err) {
+    messageBox.textContent = "Username or password is wrong. Try creating a new account.";
+    console.error(err);
   }
 }
 window.login = login;
+
+// 🔄 Toggle Login/Signup
+function toggleAuthMode() {
+  isLoginMode = !isLoginMode;
+  const title = document.getElementById("authTitle");
+  const button = document.getElementById("authButton");
+  const switchText = document.getElementById("authSwitch");
+
+  if (isLoginMode) {
+    title.textContent = "Login";
+    button.textContent = "Login";
+    switchText.textContent = "Don't have an account? Sign up";
+  } else {
+    title.textContent = "Sign Up";
+    button.textContent = "Sign Up";
+    switchText.textContent = "Already have an account? Login";
+  }
+}
+document.getElementById("authSwitch").addEventListener("click", toggleAuthMode);
 
 // 🔄 Auth state
 onAuthStateChanged(auth, (user) => {
@@ -157,13 +174,12 @@ function listenPublic() {
   });
 }
 
-// 🔵 DM listener + notifications (fixed)
+// 🔵 DM listener + notifications
 function listenDMs() {
   onValue(ref(db, "messages/dms"), (snap) => {
     const dmsObj = snap.val() || {};
     const box = document.getElementById("dmBox");
 
-    // Filter DMs for this user
     const userDMs = Object.values(dmsObj)
       .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
       .sort((a, b) => b.timestamp - a.timestamp);
@@ -176,12 +192,8 @@ function listenDMs() {
       }
     });
 
-    // Update lastDMTime
-    if (userDMs.length > 0) {
-      lastDMTime = Math.max(lastDMTime, userDMs[0].timestamp);
-    }
+    if (userDMs.length > 0) lastDMTime = Math.max(lastDMTime, userDMs[0].timestamp);
 
-    // Render messages
     box.innerHTML = "";
     userDMs.forEach(dm => {
       const div = document.createElement("div");
