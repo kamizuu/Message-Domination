@@ -8,7 +8,7 @@
 
 <h1 id="heading">Message Domination</h1>
 
-<!-- 🔔 Notification Prompt -->
+<!-- 🔔 Notifications -->
 <div id="notifyBox" class="input-container" style="display:none;">
   <p>Enable notifications for Direct Messages?</p>
   <button onclick="enableNotifications()">Enable Notifications</button>
@@ -67,13 +67,13 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
-/* 🔐 Auth state */
+/* 🔐 Auth */
 let isSignup = false;
 let currentUsername = null;
 
 /* 📨 DM state */
 let cachedDMs = [];
-let notifiedTimestamps = new Set();
+let latestSeenDM = 0;
 
 /* 🔔 Notifications */
 function enableNotifications() {
@@ -96,15 +96,8 @@ async function handleAuth() {
   const username = document.getElementById("loginUsername").value.trim().toLowerCase();
   const password = document.getElementById("loginPassword").value;
 
-  if (!username || !password) {
-    alert("Enter username and password");
-    return;
-  }
-
-  if (password.length < 6) {
-    alert("Password must be at least 6 characters");
-    return;
-  }
+  if (!username || !password) return alert("Enter username and password");
+  if (password.length < 6) return alert("Password must be at least 6 characters");
 
   const email = `${username}@messagedom.com`;
 
@@ -115,13 +108,13 @@ async function handleAuth() {
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
-  } catch (err) {
+  } catch {
     alert("Username or password is wrong. Try creating a new account.");
   }
 }
 window.handleAuth = handleAuth;
 
-/* 🔄 Auth listener */
+/* 🔄 Auth state */
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
 
@@ -164,7 +157,7 @@ function storeMessage() {
 }
 window.storeMessage = storeMessage;
 
-/* 🔴 Public message */
+/* 🔴 Public */
 function listenPublic() {
   onValue(ref(db, "messages/latest"), (snap) => {
     const d = snap.val();
@@ -173,31 +166,38 @@ function listenPublic() {
   });
 }
 
-/* 🔵 DM listener (mobile-safe + notifications) */
+/* 🔵 DMs — FIXED */
 function listenDMs() {
   onValue(ref(db, "messages/dms"), (snap) => {
+
+    // 🔥 Critical mobile fix
+    if (!currentUsername) return;
+
     const raw = snap.val();
-    if (!raw) return; // 🚫 NEVER clear on null (mobile fix)
+    if (!raw) return;
 
     const userDMs = Object.values(raw)
       .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
       .sort((a, b) => b.timestamp - a.timestamp);
 
-    // 🔔 Notifications
+    // 🔔 Notifications (desktop-safe)
     userDMs.forEach(dm => {
       if (
         dm.to === currentUsername &&
-        Notification.permission === "granted" &&
-        !notifiedTimestamps.has(dm.timestamp)
+        dm.timestamp > latestSeenDM &&
+        Notification.permission === "granted"
       ) {
         new Notification("New DM", {
           body: `${dm.from}: ${dm.text}`
         });
-        notifiedTimestamps.add(dm.timestamp);
       }
     });
 
-    // 🧠 Avoid useless re-render
+    if (userDMs.length > 0) {
+      latestSeenDM = Math.max(...userDMs.map(dm => dm.timestamp));
+    }
+
+    // Avoid useless re-render
     if (JSON.stringify(userDMs) === JSON.stringify(cachedDMs)) return;
     cachedDMs = userDMs;
 
