@@ -14,25 +14,25 @@
   <button onclick="enableNotifications()">Enable Notifications</button>
 </div>
 
-<!-- LOGIN / SIGNUP -->
+<!-- 🔐 AUTH -->
 <div id="loginBox" class="input-container">
   <h2 id="authTitle">Login</h2>
   <input type="text" id="loginUsername" placeholder="Username">
-  <input type="password" id="loginPassword" placeholder="Password">
-  <button id="authButton" onclick="login()">Login</button>
-  <p id="authSwitch" style="cursor:pointer; color: #00f;">Don't have an account? Sign up</p>
-  <p id="authMessage" style="color:red;"></p>
+  <input type="password" id="loginPassword" placeholder="Password (6+ chars)">
+  <button onclick="handleAuth()">Continue</button>
+  <p>
+    <a href="#" onclick="toggleAuth()">Switch to <span id="authSwitch">Sign Up</span></a>
+  </p>
 </div>
 
-<!-- APP -->
+<!-- 📦 APP -->
 <div id="appBox" style="display:none;">
-  <h2>Welcome!</h2>
-  <p>You are logged in as <strong id="currentUser"></strong></p>
+  <h2>Welcome, <span id="currentUser"></span></h2>
 
   <div class="input-container">
-    <input type="text" id="targetInput" placeholder="To (optional)">
+    <input type="text" id="targetInput" placeholder="DM user (optional)">
     <input type="text" id="messageInput" placeholder="Message (required)">
-    <button onclick="storeMessage()">Submit</button>
+    <button onclick="storeMessage()">Send</button>
   </div>
 
   <h3 class="section-title">Latest Public Message</h3>
@@ -52,6 +52,7 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js";
 
+/* 🔧 Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyCOQpcD2aZfk4se0p4dflESM-Af6p165tM",
   authDomain: "message-domination.firebaseapp.com",
@@ -66,11 +67,15 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
+/* 🔐 Auth state */
+let isSignup = false;
 let currentUsername = null;
-let lastDMTime = 0;
-let isLoginMode = true;
 
-// 🔔 Enable notifications
+/* 📨 DM state */
+let cachedDMs = [];
+let notifiedTimestamps = new Set();
+
+/* 🔔 Notifications */
 function enableNotifications() {
   Notification.requestPermission().then(() => {
     document.getElementById("notifyBox").style.display = "none";
@@ -78,51 +83,45 @@ function enableNotifications() {
 }
 window.enableNotifications = enableNotifications;
 
-// 🔐 Login / Signup
-async function login() {
-  const username = document.getElementById("loginUsername").value.trim();
-  const password = document.getElementById("loginPassword").value;
-  if (!username || !password) return alert("Enter username and password");
+/* 🔁 Toggle auth mode */
+function toggleAuth() {
+  isSignup = !isSignup;
+  document.getElementById("authTitle").textContent = isSignup ? "Sign Up" : "Login";
+  document.getElementById("authSwitch").textContent = isSignup ? "Login" : "Sign Up";
+}
+window.toggleAuth = toggleAuth;
 
-  const email = `${username.toLowerCase()}@messagedom.com`;
-  const messageBox = document.getElementById("authMessage");
-  messageBox.textContent = "";
+/* 🔐 Login / Signup */
+async function handleAuth() {
+  const username = document.getElementById("loginUsername").value.trim().toLowerCase();
+  const password = document.getElementById("loginPassword").value;
+
+  if (!username || !password) {
+    alert("Enter username and password");
+    return;
+  }
+
+  if (password.length < 6) {
+    alert("Password must be at least 6 characters");
+    return;
+  }
+
+  const email = `${username}@messagedom.com`;
 
   try {
-    if (isLoginMode) {
-      await signInWithEmailAndPassword(auth, email, password);
-    } else {
+    if (isSignup) {
       await createUserWithEmailAndPassword(auth, email, password);
-      alert("Account created successfully! You can now log in.");
-      toggleAuthMode(); // switch to login after signup
+      alert("Account created!");
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
     }
   } catch (err) {
-    messageBox.textContent = "Username or password is wrong. Try creating a new account.";
-    console.error(err);
+    alert("Username or password is wrong. Try creating a new account.");
   }
 }
-window.login = login;
+window.handleAuth = handleAuth;
 
-// 🔄 Toggle Login/Signup
-function toggleAuthMode() {
-  isLoginMode = !isLoginMode;
-  const title = document.getElementById("authTitle");
-  const button = document.getElementById("authButton");
-  const switchText = document.getElementById("authSwitch");
-
-  if (isLoginMode) {
-    title.textContent = "Login";
-    button.textContent = "Login";
-    switchText.textContent = "Don't have an account? Sign up";
-  } else {
-    title.textContent = "Sign Up";
-    button.textContent = "Sign Up";
-    switchText.textContent = "Already have an account? Login";
-  }
-}
-document.getElementById("authSwitch").addEventListener("click", toggleAuthMode);
-
-// 🔄 Auth state
+/* 🔄 Auth listener */
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
 
@@ -140,9 +139,9 @@ onAuthStateChanged(auth, (user) => {
   listenDMs();
 });
 
-// ✉️ Send message
+/* ✉️ Send message */
 function storeMessage() {
-  const to = document.getElementById("targetInput").value.trim();
+  const to = document.getElementById("targetInput").value.trim().toLowerCase();
   const text = document.getElementById("messageInput").value.trim();
   if (!text) return;
 
@@ -165,7 +164,7 @@ function storeMessage() {
 }
 window.storeMessage = storeMessage;
 
-// 🔴 Public listener
+/* 🔴 Public message */
 function listenPublic() {
   onValue(ref(db, "messages/latest"), (snap) => {
     const d = snap.val();
@@ -174,27 +173,37 @@ function listenPublic() {
   });
 }
 
-// 🔵 DM listener + notifications
+/* 🔵 DM listener (mobile-safe + notifications) */
 function listenDMs() {
   onValue(ref(db, "messages/dms"), (snap) => {
-    const dmsObj = snap.val() || {};
-    const box = document.getElementById("dmBox");
+    const raw = snap.val();
+    if (!raw) return; // 🚫 NEVER clear on null (mobile fix)
 
-    const userDMs = Object.values(dmsObj)
+    const userDMs = Object.values(raw)
       .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
       .sort((a, b) => b.timestamp - a.timestamp);
 
-    // Fire notifications for new incoming DMs
+    // 🔔 Notifications
     userDMs.forEach(dm => {
-      if (dm.to === currentUsername && dm.timestamp > lastDMTime &&
-          Notification.permission === "granted") {
-        new Notification("New DM", { body: `${dm.from}: ${dm.text}` });
+      if (
+        dm.to === currentUsername &&
+        Notification.permission === "granted" &&
+        !notifiedTimestamps.has(dm.timestamp)
+      ) {
+        new Notification("New DM", {
+          body: `${dm.from}: ${dm.text}`
+        });
+        notifiedTimestamps.add(dm.timestamp);
       }
     });
 
-    if (userDMs.length > 0) lastDMTime = Math.max(lastDMTime, userDMs[0].timestamp);
+    // 🧠 Avoid useless re-render
+    if (JSON.stringify(userDMs) === JSON.stringify(cachedDMs)) return;
+    cachedDMs = userDMs;
 
+    const box = document.getElementById("dmBox");
     box.innerHTML = "";
+
     userDMs.forEach(dm => {
       const div = document.createElement("div");
       div.className = "dm-message";
