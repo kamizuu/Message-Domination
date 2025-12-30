@@ -157,34 +157,33 @@ function listenPublic() {
   });
 }
 
-// 🔵 DM listener + notifications
+// 🔵 DM listener + notifications (fixed)
 function listenDMs() {
   onValue(ref(db, "messages/dms"), (snap) => {
+    const dmsObj = snap.val() || {};
     const box = document.getElementById("dmBox");
-    const dmsObj = snap.val();
-    if (!dmsObj) {
-      box.innerHTML = "";
-      return;
-    }
 
-    const dms = Object.values(dmsObj)
+    // Filter DMs for this user
+    const userDMs = Object.values(dmsObj)
       .filter(dm => dm.from === currentUsername || dm.to === currentUsername)
       .sort((a, b) => b.timestamp - a.timestamp);
 
-    let newestTimestamp = lastDMTime;
-
-    dms.forEach(dm => {
+    // Fire notifications for new incoming DMs
+    userDMs.forEach(dm => {
       if (dm.to === currentUsername && dm.timestamp > lastDMTime &&
           Notification.permission === "granted") {
         new Notification("New DM", { body: `${dm.from}: ${dm.text}` });
       }
-      if (dm.timestamp > newestTimestamp) newestTimestamp = dm.timestamp;
     });
 
-    lastDMTime = newestTimestamp;
+    // Update lastDMTime
+    if (userDMs.length > 0) {
+      lastDMTime = Math.max(lastDMTime, userDMs[0].timestamp);
+    }
 
+    // Render messages
     box.innerHTML = "";
-    dms.forEach(dm => {
+    userDMs.forEach(dm => {
       const div = document.createElement("div");
       div.className = "dm-message";
       div.textContent = `${dm.from} ➜ ${dm.to}: ${dm.text}`;
